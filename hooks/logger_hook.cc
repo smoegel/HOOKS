@@ -63,50 +63,67 @@ int unload() {
 
 // Callout for packet reception
 int pkt4_receive(CalloutHandle &handle) {
-  Pkt4Ptr query4_ptr;
-  handle.getArgument("query4", query4_ptr);
+  try {
+    Pkt4Ptr query4_ptr;
+    handle.getArgument("query4", query4_ptr);
 
-  if (dhcp_log_file.is_open()) {
-    std::cerr << "HOOK DEBUG: pkt4_receive entered"
-              << std::endl; // Debug to console
-    dhcp_log_file << "------------------------------------------------"
-                  << std::endl;
-    dhcp_log_file << "Packet Received at: " << std::time(nullptr) << std::endl;
-    dhcp_log_file << "Transaction ID: 0x" << std::hex
-                  << query4_ptr->getTransid() << std::dec << std::endl;
-    dhcp_log_file << "Packet Type: " << query4_ptr->getType() << std::endl;
-    dhcp_log_file << "CIADDR: " << query4_ptr->getCiaddr().toText()
-                  << std::endl;
-    dhcp_log_file << "YIADDR: " << query4_ptr->getYiaddr().toText()
-                  << std::endl;
-    dhcp_log_file << "SIADDR: " << query4_ptr->getSiaddr().toText()
-                  << std::endl;
-    dhcp_log_file << "GIADDR: " << query4_ptr->getGiaddr().toText()
-                  << std::endl;
-    dhcp_log_file << "CHADDR: " << query4_ptr->getHWAddr()->toText(false)
-                  << std::endl;
+    if (dhcp_log_file.is_open()) {
+      std::cerr << "HOOK DEBUG: pkt4_receive entered"
+                << std::endl; // Debug to console
+      dhcp_log_file << "------------------------------------------------"
+                    << std::endl;
+      dhcp_log_file << "Packet Received at: " << std::time(nullptr)
+                    << std::endl;
+      dhcp_log_file << "Transaction ID: 0x" << std::hex
+                    << query4_ptr->getTransid() << std::dec << std::endl;
+      dhcp_log_file << "Packet Type: " << (int)query4_ptr->getType()
+                    << std::endl;
+      dhcp_log_file << "CIADDR: " << query4_ptr->getCiaddr().toText()
+                    << std::endl;
+      dhcp_log_file << "YIADDR: " << query4_ptr->getYiaddr().toText()
+                    << std::endl;
+      dhcp_log_file << "SIADDR: " << query4_ptr->getSiaddr().toText()
+                    << std::endl;
+      dhcp_log_file << "GIADDR: " << query4_ptr->getGiaddr().toText()
+                    << std::endl;
+      dhcp_log_file << "CHADDR: " << query4_ptr->getHWAddr()->toText(false)
+                    << std::endl;
 
-    // Check for Option 82 (RAIO)
-    OptionPtr option82 = query4_ptr->getOption(DHO_DHCP_AGENT_OPTIONS);
-    if (option82) {
-      dhcp_log_file << "Option 82 Found!" << std::endl;
+      // Check for Option 82 (RAIO)
+      OptionPtr option82 = query4_ptr->getOption(DHO_DHCP_AGENT_OPTIONS);
+      if (option82) {
+        dhcp_log_file << "Option 82 Found!" << std::endl;
 
-      // Check if data contains "OLT_TEST"
-      // Note: This is a simplified check. Real usage should parse suboptions.
-      const std::vector<uint8_t> &data = option82->getData();
-      std::string opt82_str(data.begin(), data.end());
+        // Check if data contains "OLT_TEST"
+        // Note: This is a simplified check. Real usage should parse suboptions.
+        const std::vector<uint8_t> &data = option82->getData();
 
-      dhcp_log_file << "  Length: " << option82->len() << std::endl;
-      dhcp_log_file << "  Data (hex): ";
-      for (uint8_t byte : data) {
-        dhcp_log_file << std::hex << std::setw(2) << std::setfill('0')
-                      << (int)byte;
+        dhcp_log_file << "  Length: " << option82->len() << std::endl;
+        dhcp_log_file << "  Data (hex): ";
+        for (uint8_t byte : data) {
+          dhcp_log_file << std::hex << std::setw(2) << std::setfill('0')
+                        << (int)byte;
+        }
+        dhcp_log_file << std::dec << std::endl;
+
+      } else {
+        dhcp_log_file << "No Option 82 present." << std::endl;
       }
-      dhcp_log_file << std::dec << std::endl;
-
-    } else {
-      dhcp_log_file << "No Option 82 present." << std::endl;
     }
+  } catch (const std::exception &e) {
+    if (dhcp_log_file.is_open()) {
+      dhcp_log_file << "ERROR in pkt4_receive: " << e.what() << std::endl;
+    }
+    std::cerr << "HOOK ERROR: pkt4_receive threw exception: " << e.what()
+              << std::endl;
+    // Swallow exception to prevent Kea crash, allow packet processing to
+    // continue
+  } catch (...) {
+    if (dhcp_log_file.is_open()) {
+      dhcp_log_file << "UNKNOWN ERROR in pkt4_receive" << std::endl;
+    }
+    std::cerr << "HOOK ERROR: pkt4_receive threw unknown exception"
+              << std::endl;
   }
 
   return (0);
@@ -114,67 +131,95 @@ int pkt4_receive(CalloutHandle &handle) {
 
 // Callout for lease selection
 int lease4_select(CalloutHandle &handle) {
-  Pkt4Ptr query4_ptr;
-  Lease4Ptr lease4_ptr;
-  handle.getArgument("query4", query4_ptr);
-  handle.getArgument("lease4", lease4_ptr);
+  try {
+    Pkt4Ptr query4_ptr;
+    Lease4Ptr lease4_ptr;
+    handle.getArgument("query4", query4_ptr);
+    handle.getArgument("lease4", lease4_ptr);
 
-  if (query4_ptr && lease4_ptr) {
-    // Check for Option 82 (RAIO)
-    OptionPtr option82 = query4_ptr->getOption(DHO_DHCP_AGENT_OPTIONS);
-    if (option82) {
-      const std::vector<uint8_t> &data = option82->getData();
-      std::string opt82_str(data.begin(), data.end());
+    if (query4_ptr && lease4_ptr) {
+      // Check for Option 82 (RAIO)
+      OptionPtr option82 = query4_ptr->getOption(DHO_DHCP_AGENT_OPTIONS);
+      if (option82) {
+        const std::vector<uint8_t> &data = option82->getData();
+        std::string opt82_str(data.begin(), data.end());
 
-      // Check for OLT_TEST string inside the option data
-      if (opt82_str.find("OLT_TEST") != std::string::npos) {
-        if (dhcp_log_file.is_open()) {
-          dhcp_log_file << "  MATCH (lease4_select): OLT_TEST detected. "
-                           "Overwriting IP to 192.168.50.100"
-                        << std::endl;
+        // Check for OLT_TEST string inside the option data
+        if (opt82_str.find("OLT_TEST") != std::string::npos) {
+          if (dhcp_log_file.is_open()) {
+            dhcp_log_file << "  MATCH (lease4_select): OLT_TEST detected. "
+                             "Overwriting IP to 192.168.50.100"
+                          << std::endl;
+          }
+          std::cerr << "HOOK DEBUG: OLT_TEST match in lease4_select. Forcing "
+                       "192.168.50.100"
+                    << std::endl;
+
+          // Force the IP address
+          lease4_ptr->addr_ = isc::asiolink::IOAddress("192.168.50.100");
         }
-        std::cerr << "HOOK DEBUG: OLT_TEST match in lease4_select. Forcing "
-                     "192.168.50.100"
-                  << std::endl;
-
-        // Force the IP address
-        lease4_ptr->addr_ = isc::asiolink::IOAddress("192.168.50.100");
       }
     }
+  } catch (const std::exception &e) {
+    if (dhcp_log_file.is_open()) {
+      dhcp_log_file << "ERROR in lease4_select: " << e.what() << std::endl;
+    }
+    std::cerr << "HOOK ERROR: lease4_select threw exception: " << e.what()
+              << std::endl;
+  } catch (...) {
+    if (dhcp_log_file.is_open()) {
+      dhcp_log_file << "UNKNOWN ERROR in lease4_select" << std::endl;
+    }
+    std::cerr << "HOOK ERROR: lease4_select threw unknown exception"
+              << std::endl;
   }
   return (0);
 }
 
 // Callout for packet transmission
 int pkt4_send(CalloutHandle &handle) {
-  Pkt4Ptr response4_ptr;
-  handle.getArgument("response4", response4_ptr);
+  try {
+    Pkt4Ptr response4_ptr;
+    handle.getArgument("response4", response4_ptr);
 
-  if (dhcp_log_file.is_open()) {
-    std::cerr << "HOOK DEBUG: pkt4_send entered"
-              << std::endl; // Debug to console
-    dhcp_log_file << "------------------------------------------------"
-                  << std::endl;
-    dhcp_log_file << "Packet Sent at: " << std::time(nullptr) << std::endl;
-    dhcp_log_file << "Transaction ID: 0x" << std::hex
-                  << response4_ptr->getTransid() << std::dec << std::endl;
-    dhcp_log_file << "Packet Type: " << response4_ptr->getType() << std::endl;
-    dhcp_log_file << "CIADDR: " << response4_ptr->getCiaddr().toText()
-                  << std::endl;
-    dhcp_log_file << "YIADDR (Assigned IP): "
-                  << response4_ptr->getYiaddr().toText() << std::endl;
-    dhcp_log_file << "SIADDR: " << response4_ptr->getSiaddr().toText()
-                  << std::endl;
-    dhcp_log_file << "GIADDR: " << response4_ptr->getGiaddr().toText()
-                  << std::endl;
-    dhcp_log_file << "CHADDR: " << response4_ptr->getHWAddr()->toText(false)
-                  << std::endl;
+    if (dhcp_log_file.is_open()) {
+      std::cerr << "HOOK DEBUG: pkt4_send entered"
+                << std::endl; // Debug to console
+      dhcp_log_file << "------------------------------------------------"
+                    << std::endl;
+      dhcp_log_file << "Packet Sent at: " << std::time(nullptr) << std::endl;
+      dhcp_log_file << "Transaction ID: 0x" << std::hex
+                    << response4_ptr->getTransid() << std::dec << std::endl;
+      dhcp_log_file << "Packet Type: " << (int)response4_ptr->getType()
+                    << std::endl;
+      dhcp_log_file << "CIADDR: " << response4_ptr->getCiaddr().toText()
+                    << std::endl;
+      dhcp_log_file << "YIADDR (Assigned IP): "
+                    << response4_ptr->getYiaddr().toText() << std::endl;
+      dhcp_log_file << "SIADDR: " << response4_ptr->getSiaddr().toText()
+                    << std::endl;
+      dhcp_log_file << "GIADDR: " << response4_ptr->getGiaddr().toText()
+                    << std::endl;
+      dhcp_log_file << "CHADDR: " << response4_ptr->getHWAddr()->toText(false)
+                    << std::endl;
 
-    // Check for Option 82 in response (if echoed)
-    OptionPtr option82 = response4_ptr->getOption(DHO_DHCP_AGENT_OPTIONS);
-    if (option82) {
-      dhcp_log_file << "Option 82 included in response." << std::endl;
+      // Check for Option 82 in response (if echoed)
+      OptionPtr option82 = response4_ptr->getOption(DHO_DHCP_AGENT_OPTIONS);
+      if (option82) {
+        dhcp_log_file << "Option 82 included in response." << std::endl;
+      }
     }
+  } catch (const std::exception &e) {
+    if (dhcp_log_file.is_open()) {
+      dhcp_log_file << "ERROR in pkt4_send: " << e.what() << std::endl;
+    }
+    std::cerr << "HOOK ERROR: pkt4_send threw exception: " << e.what()
+              << std::endl;
+  } catch (...) {
+    if (dhcp_log_file.is_open()) {
+      dhcp_log_file << "UNKNOWN ERROR in pkt4_send" << std::endl;
+    }
+    std::cerr << "HOOK ERROR: pkt4_send threw unknown exception" << std::endl;
   }
 
   return (0);
