@@ -12,3 +12,6 @@ __pycache__/
 
 # Temporary/System files
 .DS_Store
+
+#pcapng files
+*.pcapng
