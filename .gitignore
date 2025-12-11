@@ -1,0 +1,14 @@
+# Object files and libraries
+*.o
+*.so
+
+# Logs
+dhcp_hook_log.txt
+*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# Temporary/System files
+.DS_Store

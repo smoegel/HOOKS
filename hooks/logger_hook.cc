@@ -1,0 +1,102 @@
+#include <dhcp/pkt4.h>
+#include <fstream>
+#include <hooks/hooks.h>
+#include <iomanip>
+#include <sstream>
+#include <string>
+#include <sys/stat.h> // For chmod
+
+using namespace isc::hooks;
+using namespace isc::dhcp;
+using namespace std;
+
+// Define an output file stream for logging
+std::ofstream dhcp_log_file;
+
+extern "C" {
+
+// Version function to ensure compatibility
+int version() { return (KEA_HOOKS_VERSION); }
+
+// Multi-threading compatibility
+int multi_threading_compatible() { return (1); }
+
+// Forward declaration
+int pkt4_receive(CalloutHandle &handle);
+
+// Load function: open the log file
+int load(LibraryHandle &handle) {
+  dhcp_log_file.open("dhcp_hook_log.txt", std::ios::app);
+  if (!dhcp_log_file.is_open()) {
+    std::cerr << "Failed to open log file" << std::endl;
+    return (1); // Fail to load if file can't be opened
+  }
+
+  // Set permissions to be world-readable/writable
+  chmod("dhcp_hook_log.txt", 0666);
+
+  dhcp_log_file << "Kea Packet Logger Hook Loaded" << std::endl;
+  std::cerr << "HOOK DEBUG: Hook Loaded" << std::endl; // Debug to console
+
+  // Explicitly register the callout to ensure it works
+  handle.registerCallout("pkt4_receive", pkt4_receive);
+
+  return (0);
+}
+
+// Unload function: close the log file
+int unload() {
+  if (dhcp_log_file.is_open()) {
+    dhcp_log_file << "Kea Packet Logger Hook Unloaded" << std::endl;
+    dhcp_log_file.close();
+  }
+  return (0);
+}
+
+// Callout for packet reception
+int pkt4_receive(CalloutHandle &handle) {
+  Pkt4Ptr query4_ptr;
+  handle.getArgument("query4", query4_ptr);
+
+  if (dhcp_log_file.is_open()) {
+    std::cerr << "HOOK DEBUG: pkt4_receive entered"
+              << std::endl; // Debug to console
+    dhcp_log_file << "------------------------------------------------"
+                  << std::endl;
+    dhcp_log_file << "Packet Received at: " << std::time(nullptr) << std::endl;
+    dhcp_log_file << "Transaction ID: 0x" << std::hex
+                  << query4_ptr->getTransid() << std::dec << std::endl;
+    dhcp_log_file << "Packet Type: " << query4_ptr->getType() << std::endl;
+    dhcp_log_file << "CIADDR: " << query4_ptr->getCiaddr().toText()
+                  << std::endl;
+    dhcp_log_file << "YIADDR: " << query4_ptr->getYiaddr().toText()
+                  << std::endl;
+    dhcp_log_file << "SIADDR: " << query4_ptr->getSiaddr().toText()
+                  << std::endl;
+    dhcp_log_file << "GIADDR: " << query4_ptr->getGiaddr().toText()
+                  << std::endl;
+    dhcp_log_file << "CHADDR: " << query4_ptr->getHWAddr()->toText(false)
+                  << std::endl;
+
+    // Check for Option 82 (RAIO)
+    OptionPtr option82 = query4_ptr->getOption(DHO_DHCP_AGENT_OPTIONS);
+    if (option82) {
+      dhcp_log_file << "Option 82 Found!" << std::endl;
+      // Dump raw option data for analysis
+      dhcp_log_file << "  Length: " << option82->len() << std::endl;
+      dhcp_log_file << "  Data (hex): ";
+      const std::vector<uint8_t> &data = option82->getData();
+      for (uint8_t byte : data) {
+        dhcp_log_file << std::hex << std::setw(2) << std::setfill('0')
+                      << (int)byte;
+      }
+      dhcp_log_file << std::dec << std::endl;
+    } else {
+      dhcp_log_file << "No Option 82 present." << std::endl;
+    }
+  }
+
+  return (0);
+}
+
+} // extern "C"
