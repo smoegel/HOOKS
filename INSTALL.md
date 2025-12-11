@@ -122,3 +122,28 @@ cat dhcp_hook_log.txt
 ```
 
 Mali by ste vidieť záznamy o prijatých paketoch a dekódované Option 82 dáta.
+
+## 7. Správa Verzií (Git a GitHub)
+
+Pre uloženie aktuálneho stavu projektu a nahranie na GitHub postupujte takto:
+
+1. **Inicializácia lokálneho repozitára**:
+   ```bash
+   cd /home/manyo/Devel/hooks
+   git init
+   git add .
+   git commit -m "Initial commit: Kea Hook and Simulator"
+   ```
+
+2. **Vytvorenie vzdialeného repozitára na GitHub**:
+   Použijeme GitHub CLI (`gh`), ktoré je nainštalované.
+   
+   ```bash
+   # Prihlásenie (ak ešte nie ste prihlásený)
+   gh auth login
+   # Postupujte podľa inštrukcií na obrazovke (vyberte GitHub.com, SSH, atď.)
+
+   # Vytvorenie repozitára 'HOOKS' (verejný) a pushnutie kódu
+   # Použijeme názov remote 'github' namiesto predvoleného 'origin'
+   gh repo create HOOKS --public --source=. --remote=github --push
+   ```
