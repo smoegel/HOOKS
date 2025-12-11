@@ -23,6 +23,7 @@ int multi_threading_compatible() { return (1); }
 
 // Forward declaration
 int pkt4_receive(CalloutHandle &handle);
+int pkt4_send(CalloutHandle &handle);
 
 // Load function: open the log file
 int load(LibraryHandle &handle) {
@@ -40,6 +41,7 @@ int load(LibraryHandle &handle) {
 
   // Explicitly register the callout to ensure it works
   handle.registerCallout("pkt4_receive", pkt4_receive);
+  handle.registerCallout("pkt4_send", pkt4_send);
 
   return (0);
 }
@@ -93,6 +95,41 @@ int pkt4_receive(CalloutHandle &handle) {
       dhcp_log_file << std::dec << std::endl;
     } else {
       dhcp_log_file << "No Option 82 present." << std::endl;
+    }
+  }
+
+  return (0);
+}
+
+// Callout for packet transmission
+int pkt4_send(CalloutHandle &handle) {
+  Pkt4Ptr response4_ptr;
+  handle.getArgument("response4", response4_ptr);
+
+  if (dhcp_log_file.is_open()) {
+    std::cerr << "HOOK DEBUG: pkt4_send entered"
+              << std::endl; // Debug to console
+    dhcp_log_file << "------------------------------------------------"
+                  << std::endl;
+    dhcp_log_file << "Packet Sent at: " << std::time(nullptr) << std::endl;
+    dhcp_log_file << "Transaction ID: 0x" << std::hex
+                  << response4_ptr->getTransid() << std::dec << std::endl;
+    dhcp_log_file << "Packet Type: " << response4_ptr->getType() << std::endl;
+    dhcp_log_file << "CIADDR: " << response4_ptr->getCiaddr().toText()
+                  << std::endl;
+    dhcp_log_file << "YIADDR (Assigned IP): "
+                  << response4_ptr->getYiaddr().toText() << std::endl;
+    dhcp_log_file << "SIADDR: " << response4_ptr->getSiaddr().toText()
+                  << std::endl;
+    dhcp_log_file << "GIADDR: " << response4_ptr->getGiaddr().toText()
+                  << std::endl;
+    dhcp_log_file << "CHADDR: " << response4_ptr->getHWAddr()->toText(false)
+                  << std::endl;
+
+    // Check for Option 82 in response (if echoed)
+    OptionPtr option82 = response4_ptr->getOption(DHO_DHCP_AGENT_OPTIONS);
+    if (option82) {
+      dhcp_log_file << "Option 82 included in response." << std::endl;
     }
   }
 
