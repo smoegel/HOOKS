@@ -1,4 +1,8 @@
+#include <asiolink/io_address.h>
+#include <dhcp/dhcp4.h> // For DHO_ constants
+#include <dhcp/option4_addrlst.h>
 #include <dhcp/pkt4.h>
+#include <dhcpsrv/lease.h> // For Lease4Ptr
 #include <fstream>
 #include <hooks/hooks.h>
 #include <iomanip>
@@ -24,6 +28,7 @@ int multi_threading_compatible() { return (1); }
 // Forward declaration
 int pkt4_receive(CalloutHandle &handle);
 int pkt4_send(CalloutHandle &handle);
+int lease4_select(CalloutHandle &handle);
 
 // Load function: open the log file
 int load(LibraryHandle &handle) {
@@ -42,6 +47,7 @@ int load(LibraryHandle &handle) {
   // Explicitly register the callout to ensure it works
   handle.registerCallout("pkt4_receive", pkt4_receive);
   handle.registerCallout("pkt4_send", pkt4_send);
+  handle.registerCallout("lease4_select", lease4_select);
 
   return (0);
 }
@@ -84,20 +90,58 @@ int pkt4_receive(CalloutHandle &handle) {
     OptionPtr option82 = query4_ptr->getOption(DHO_DHCP_AGENT_OPTIONS);
     if (option82) {
       dhcp_log_file << "Option 82 Found!" << std::endl;
-      // Dump raw option data for analysis
+
+      // Check if data contains "OLT_TEST"
+      // Note: This is a simplified check. Real usage should parse suboptions.
+      const std::vector<uint8_t> &data = option82->getData();
+      std::string opt82_str(data.begin(), data.end());
+
       dhcp_log_file << "  Length: " << option82->len() << std::endl;
       dhcp_log_file << "  Data (hex): ";
-      const std::vector<uint8_t> &data = option82->getData();
       for (uint8_t byte : data) {
         dhcp_log_file << std::hex << std::setw(2) << std::setfill('0')
                       << (int)byte;
       }
       dhcp_log_file << std::dec << std::endl;
+
     } else {
       dhcp_log_file << "No Option 82 present." << std::endl;
     }
   }
 
+  return (0);
+}
+
+// Callout for lease selection
+int lease4_select(CalloutHandle &handle) {
+  Pkt4Ptr query4_ptr;
+  Lease4Ptr lease4_ptr;
+  handle.getArgument("query4", query4_ptr);
+  handle.getArgument("lease4", lease4_ptr);
+
+  if (query4_ptr && lease4_ptr) {
+    // Check for Option 82 (RAIO)
+    OptionPtr option82 = query4_ptr->getOption(DHO_DHCP_AGENT_OPTIONS);
+    if (option82) {
+      const std::vector<uint8_t> &data = option82->getData();
+      std::string opt82_str(data.begin(), data.end());
+
+      // Check for OLT_TEST string inside the option data
+      if (opt82_str.find("OLT_TEST") != std::string::npos) {
+        if (dhcp_log_file.is_open()) {
+          dhcp_log_file << "  MATCH (lease4_select): OLT_TEST detected. "
+                           "Overwriting IP to 192.168.50.100"
+                        << std::endl;
+        }
+        std::cerr << "HOOK DEBUG: OLT_TEST match in lease4_select. Forcing "
+                     "192.168.50.100"
+                  << std::endl;
+
+        // Force the IP address
+        lease4_ptr->addr_ = isc::asiolink::IOAddress("192.168.50.100");
+      }
+    }
+  }
   return (0);
 }
 
